@@ -4,6 +4,16 @@ API оплаты курсов: тарифы, платежи, промокод, �
 Python 3.11, FastAPI, Pydantic v2, асинхронный SQLAlchemy 2.0, SQLite, Alembic.
 Все суммы в API и БД — целые числа в копейках.
 
+
+## Клонирование репозитория
+
+Установите Git и Python 3.11. Клонируйте репозиторий и перейдите в его папку:
+
+```sh
+git clone https://github.com/Igor-Baryshnikov/kvitto_test.git
+cd kvitto_test
+```
+
 ## Настройки окружения
 
 Перед первым запуском создайте `.env` из примера (если файл уже существует,
@@ -53,28 +63,16 @@ SQLite хранится в именованном томе `payments`. Оста�
 
 ### Локально
 
-Установите Git и Python 3.11. Клонируйте репозиторий и перейдите в его папку:
-
-```sh
-git clone https://github.com/Igor-Baryshnikov/kvitto_test.git
-cd kvitto_test
-```
-
 Установите Poetry, если он ещё не установлен:
 
 ```sh
-python3.11 -m pip install --user poetry
+pip install poetry
 poetry --version
 ```
-
-В Windows для установки можно использовать `py -3.11 -m pip install --user poetry`.
-Если команда `poetry` не находится, добавьте каталог пользовательских скриптов
-Python в PATH и откройте новый терминал.
 
 Создайте `.env` по инструкции выше. Далее выполняйте команды из корня проекта:
 
 ```sh
-poetry env use python3.11
 poetry install --no-root
 poetry run python -m alembic -c billing_service/alembic.ini upgrade head
 poetry run python -m uvicorn app.main:app --app-dir billing_service --reload
