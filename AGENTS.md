@@ -13,44 +13,35 @@
 ├── AGENTS.md
 ├── AI_LOG.md
 ├── Dockerfile
-├── Makefile
 ├── README.md
 ├── TZ.md
 ├── docker-compose.yml
 ├── poetry.lock
 ├── pyproject.toml
-├── tests/                      # зеркалит структуру billing_service
+├── tests/                      # API-тесты и фикстуры
 └── billing_service/
-    ├── main.py                 # FastAPI app, lifespan, подключение роутера, обработчики исключений
     ├── alembic.ini
     ├── migrations/             # миграции Alembic
-    ├── api/
-    │   └── routers/billing.py  # APIRouter и эндпоинты
-    ├── core/
-    │   ├── config.py           # настройки, DATABASE_URL из окружения
-    │   ├── database.py         # подключение к БД, сессия
-    │   ├── dependencies.py     # зависимости для DI (Depends)
-    │   └── exceptions.py       # доменные исключения
-    ├── models/billing.py       # SQLAlchemy модели
-    ├── repositories/billing.py # class BillingRepository: только операции с БД
-    ├── schemas/billing.py      # Pydantic модели
-    └── services/
-        ├── billing.py          # class BillingService: бизнес-логика
-        ├── pricing.py          # чистые функции: скидка, промокод
-        ├── installments.py     # чистая функция: график рассрочки
-        └── transitions.py      # чистые функции: допустимые переходы статусов
+    └── app/
+        ├── main.py             # FastAPI app, lifespan, роутер, обработчики ошибок
+        ├── api/routers/billing.py
+        ├── core/               # БД, зависимости, Enum, исключения
+        ├── models/billing.py
+        ├── repositories/billing.py
+        ├── schemas/billing.py
+        └── services/billing.py # BillingService, чистые функции, словарь переходов
 ```
 
 Правила слоёв:
-- Все импорты абсолютные, от `billing_service`. Запуск: `uvicorn billing_service.main:app`.
+- Все импорты приложения абсолютные, от `app`. Запуск из корня: `poetry run python -m uvicorn app.main:app --app-dir billing_service`.
 - main.py: только создание приложения, lifespan, подключение роутера и обработчиков исключений. Lifespan вызывает `BillingService.seed_tariffs`.
-- Роутеры тонкие: разбор запроса, вызов сервиса, формирование ответа. Без бизнес-логики и без SQL.
+- Роутеры тонкие: разбор запроса, вызов сервиса, явное преобразование ORM-объектов в схемы через model_validate и формирование ответа. Возвращаемые типы — схемы ответа. Без бизнес-логики и без SQL. Сервис возвращает ORM-объекты, не импортирует схемы ответа и HTTPException.
 - BillingService: бизнес-логика и оркестрация. BillingRepository: только SQLAlchemy-операции.
-- Модули pricing.py, installments.py, transitions.py не импортируют FastAPI и SQLAlchemy.
+- Расчёт цены и графика, проверка переходов — отдельные чистые функции в services/billing.py. Они не обращаются к БД и FastAPI. Словарь допустимых переходов — константа модуля. Отдельные модули выделяются только при росте логики или повторном использовании.
 - Исключения только из core/exceptions.py (`PaymentNotFoundError`, `TariffNotFoundError`, `InvalidTransitionError`, `UnknownPromoCodeError`, `DuplicateIdempotencyKeyError` и т. п.). Обработчики в main.py превращают их в HTTP-ответы.
 - Репозиторий ловит `IntegrityError`, делает `rollback` и бросает `DuplicateIdempotencyKeyError`. Сервис ловит его и возвращает существующий платёж с кодом 200.
 - Без интерфейсов и абстрактных репозиториев, UnitOfWork, DI-контейнеров, DTO-мапперов. DI только через `Depends` в core/dependencies.py. Проект маленький, не усложнять.
-- Синхронный SQLAlchemy 2.0 и обычные `def`-эндпоинты (Alembic синхронный).
+- Асинхронный SQLAlchemy 2.0: AsyncSession, async def и await для операций БД. Асинхронные вызовы последовательно ожидаются в репозитории, сервисе, роутерах и lifespan. Alembic использует асинхронный движок.
 
 # Критичное
 - Деньги только int (копейки). float и оператор `/` запрещены.
@@ -67,12 +58,10 @@
 - Миграция: денежные колонки `Integer`, unique на `idempotency_key`, рабочий `downgrade()`.
 - Для SQLite в env.py Alembic `render_as_batch=True`.
 - `GET /payments` с фильтрами `email` и `status` (необязательные, комбинируются), порядок по `id` по убыванию, пустой результат это 200 и `[]`. Маршрут объявлен до `/payments/{id}`.
-- `DATABASE_URL` из окружения, значение по умолчанию `sqlite:///./payments.db`. Один и тот же URL для приложения и Alembic.
+- `DATABASE_URL` из окружения, значение по умолчанию `sqlite+aiosqlite:///./payments.db`. Один и тот же URL для приложения и Alembic.
 - Docker: `python:3.11-slim`, Poetry без виртуального окружения, `poetry install --no-root`. Запуск: миграции, затем `uvicorn ... --host 0.0.0.0 --port 8000`. SQLite-файл в томе.
-- Makefile: `run` (миграции + uvicorn), `migrate`, `test`, `lint`, `docker-up`. Команды Alembic через `-c billing_service/alembic.ini`.
 
-# Допущения (обновить после ответа Квитто)
-- `amount` это сумма после скидки, `discount` её размер.
+# Допущения 
 - Несуществующий `tariff_id`: 404.
 - `installment_months` при `card` или `sbp`: 422.
 - Email при сохранении и поиске приводится к нижнему регистру.
@@ -94,15 +83,15 @@
 11. Always favor explicit exceptions over silent exits or fallbacks
 12. Never return None from functions. Instead, raise meaningful exceptions (the caller catches them where the "not found" case is expected)
 13. Maintain the following method order in classes: public methods first, then protected (`_method`), then private (`__method`)
-14. Every function and method must have a docstring describing what it does
+14. Do not add docstrings. Use clear function and method names.
 15. Prefer code simplification when possible, but never at the cost of readability
 16. Do not add logging (no logger module, no logging calls): the task does not require it
 17. Do not use print statements
 18. When handling exceptions: do not silence errors. Catch an exception only where it is actually handled, otherwise let it propagate to the exception handlers in main.py
 19. Use pytest for all testing
-20. Write tests for every function in services/ and for every endpoint. Do not write tests for trivial models and schemas
+20. Keep API tests in tests/test_billing.py and fixtures in tests/conftest.py. Cover the required scenarios through endpoints and verify database state. Do not add separate service, migration, lifespan, or concurrency tests without a request.
 21. Run tests after every change
-22. Add and maintain Dockerfile, Makefile, and README.md files
+22. Add and maintain Dockerfile and README.md files
 23. These files must always be up to date with the codebase
 24. After every change: run tests, run linters (black, isort and mypy), fix all errors, ensure the code remains clean and compliant
 25. Rewrite code like this:
@@ -126,4 +115,4 @@
 27. For the tests use this structure: preparation, action, assertion (separated by blank lines)
 28. Tests must check the result (amounts, schedule, status in DB, number of payments), not only the response code
 29. Keep tests up-to-date with code
-30. In README.md add instructions how to run and set up the program locally and in docker. How to use commands from the Makefile. Add explicit info how the user can interact with the program (curl examples for every endpoint), what every command is used for, and the assumptions from the "Допущения" section
+30. In README.md add instructions how to run and set up the program locally and in docker. Add explicit info how the user can interact with the program (curl examples for every endpoint), what every command is used for, and the assumptions from the "Допущения" section
