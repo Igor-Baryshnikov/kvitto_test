@@ -1,0 +1,12 @@
+services:
+  billing:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    volumes:
+      - payments:/data
+
+volumes:
+  payments:

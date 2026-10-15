@@ -1,6 +1,11 @@
 .venv/
+.poetry-cache/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.pyc
+*.db
+.env
 *.env
 .idea/
 db.sqlite3
-__pycache__/
-.env
