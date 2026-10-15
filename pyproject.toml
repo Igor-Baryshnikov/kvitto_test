@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "billing-service"
+version = "0.1.0"
+description = "Kvitto payment API"
+authors = []
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+fastapi = ">=0.115,<1.0"
+pydantic = {version = ">=2.0,<3.0", extras = ["email"]}
+sqlalchemy = ">=2.0,<2.1"
+alembic = ">=1.13,<2.0"
+uvicorn = ">=0.30,<1.0"
+python-dotenv = ">=1.0,<2.0"
+aiosqlite = ">=0.20,<1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0,<10.0"
+httpx = ">=0.27,<1.0"
+black = ">=24.0,<27.0"
+isort = ">=5.13,<8.0"
+mypy = ">=1.10,<2.0"
+
+[tool.black]
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+mypy_path = "billing_service"
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["billing_service", "."]
+
+[build-system]
+requires = ["poetry-core>=2.0,<3.0"]
+build-backend = "poetry.core.masonry.api"
