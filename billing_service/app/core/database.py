@@ -11,7 +11,7 @@ load_dotenv(env_path)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./payments.db")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(DATABASE_URL, echo=False)
 
 
 class Base(DeclarativeBase):
